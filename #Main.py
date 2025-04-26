@@ -6,7 +6,16 @@ import keras as ks
 from keras import Sequential
 from keras import layers
 
-(training_images, training_labels), (test_images, test_labels) = tf.keras.datasets.fashion_mnist.load_data()
+class myCallback(tf.keras.callbacks.Callback):
+    def on_epoch_end(self, epoch, logs={}):
+        if(logs.get('accuracy')>0.95):
+            print('\nReached  95% accuracy so calling callback')
+            self.model.stop_training = True
+
+callbacks = myCallback()
+mnist = tf.keras.datasets.fashion_mnist
+
+(training_images, training_labels), (test_images, test_labels) = mnist.load_data()
 
 print(training_images.shape)
 print(training_labels.shape)
@@ -26,7 +35,7 @@ model.compile(optimizer='adam',
               loss='sparse_categorical_crossentropy',
               metrics=['accuracy'])
 
-model.fit(training_images, training_labels, epochs=10)
+model.fit(training_images, training_labels, epochs=50, callbacks=[callbacks])
 
 print("Done")
 
