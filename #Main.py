@@ -4,9 +4,12 @@ import tensorflow as tf
 import keras as ks
 import urllib.request
 import zipfile
+import tensorflow_datasets as tfds
 
+from keras._tf_keras.keras.preprocessing.image import ImageDataGenerator
 from keras import Sequential
 from keras import layers
+from keras._tf_keras.keras.optimizers import RMSprop
 
 class myCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs={}):
@@ -14,45 +17,69 @@ class myCallback(tf.keras.callbacks.Callback):
             print('\nReached  95% accuracy so calling callback')
             self.model.stop_training = True
 
+training_dir = 'horse-or-human/train/'
+validation_dir = 'horse-or-human/validation/'
+
+train_datagen = ImageDataGenerator(rescale=1/255)
+validation_datagen = ImageDataGenerator(rescale=1/255)
+
+train_generator = train_datagen.flow_from_directory(
+    training_dir,
+    target_size=(300, 300),
+    class_mode='binary'
+)
+validation_generator = validation_datagen.flow_from_directory(
+    training_dir,
+    target_size=(300, 300),
+    class_mode='binary'
+)
+
+test_data = tfds.load('horses_or_humans', split='test', as_supervised=True)
+IMG_SIZE = 300
+def preprocess_test_image(image, label):
+    resized_image = tf.image.resize(image, (IMG_SIZE, IMG_SIZE))
+    scaled_image = tf.cast(resized_image, tf.float32) / 255.0
+    return scaled_image, label
+
+test_dataset = test_data.map(preprocess_test_image).batch(32).prefetch(tf.data.AUTOTUNE)
+
+
 callbacks = myCallback()
 mnist = tf.keras.datasets.fashion_mnist
 
-(training_images, training_labels), (test_images, test_labels) = mnist.load_data()
-
-print(training_images.shape)
-print(training_labels.shape)
-print(test_images.shape)
-print(test_labels.shape)
-
-NumPixelX = 28
-NumPixelY = 28
-NumColorChannels = 1
-training_images = training_images.reshape(60000, NumPixelX, NumPixelY, NumColorChannels)
-training_images = training_images/255
-test_images = test_images.reshape(10000, NumPixelX, NumPixelY, 1)
-test_images = test_images/255
+NumPixelX = 300
+NumPixelY = 300
+NumColorChannels = 3
 
 model = Sequential([
-    layers.Conv2D(64, (3,3), activation='relu',
+    layers.Conv2D(16, (3,3), activation='relu',
       input_shape=(NumPixelX, NumPixelY, NumColorChannels)),
+    layers.MaxPooling2D(2,2),
+    layers.Conv2D(32, (3, 3), activation='relu'),
+    layers.MaxPooling2D(2,2),
+    layers.Conv2D(64, (3, 3), activation='relu'),
+    layers.MaxPooling2D(2,2),
+    layers.Conv2D(64, (3, 3), activation='relu'),
     layers.MaxPooling2D(2,2),
     layers.Conv2D(64, (3, 3), activation='relu'),
     layers.MaxPooling2D(2,2),
     layers.Flatten(),
-    layers.Dense(128, activation=tf.nn.relu),
-    layers.Dense(10, activation=tf.nn.softmax)
+    layers.Dense(512, activation='relu'),
+    layers.Dense(1, activation='sigmoid')
 ])
 
-model.compile(optimizer='adam',
-              loss='sparse_categorical_crossentropy',
+model.compile(loss='binary_crossentropy',
+              optimizer=RMSprop(learning_rate=0.001),
               metrics=['accuracy'])
 
-model.fit(training_images, training_labels, epochs=50, callbacks=[callbacks])
-
+#callbacks=[callbacks]
+history = model.fit(
+    train_generator, 
+    epochs=15, 
+    validation_data=validation_generator
+    )
 print("Done")
-
-model.evaluate(test_images, test_labels)
-
-classifications = model.predict(test_images)
-print(classifications[0])
-print(test_labels[0])
+print("\nEvaluating on Test Data...")
+loss, accuracy = model.evaluate(test_dataset)
+print(f"Test Loss: {loss:.4f}")
+print(f"Test Accuracy: {accuracy:.4f}")
