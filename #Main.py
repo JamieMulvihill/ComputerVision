@@ -2,6 +2,8 @@
 
 import tensorflow as tf
 import keras as ks
+import urllib.request
+import zipfile
 
 from keras import Sequential
 from keras import layers
